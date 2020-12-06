@@ -57,11 +57,11 @@ Deno.test("should return rejected promise if the callback fails", async () => {
 });
 
 Deno.test("should wait until the lock is released before granting it to someone else", async () => {
-  let resolveTask1: (() => void) | undefined;
+  let resolveTask1: ((v?: unknown) => void) | undefined;
   const task1 = new Promise((resolve) => {
     resolveTask1 = resolve;
   });
-  let resolveTask2: (() => void) | undefined;
+  let resolveTask2: ((v?: unknown) => void) | undefined;
   const task2 = new Promise((resolve) => {
     resolveTask2 = resolve;
   });
