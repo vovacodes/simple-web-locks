@@ -5,7 +5,8 @@ declare class Lock {
     constructor(name: string, mode: Mode);
 }
 interface LockOptions {
-    mode: "exclusive";
+    mode?: "exclusive";
+    signal?: AbortSignal;
 }
 declare type LockGrantedCallback<R> = (lock: Lock) => R | Promise<R>;
 declare class LockManager<T> {

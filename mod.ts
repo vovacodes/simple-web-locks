@@ -13,7 +13,8 @@ interface LockRequest<R> {
 
 // TODO: support all of the options: https://wicg.github.io/web-locks/#dictdef-lockoptions
 interface LockOptions {
-  mode: "exclusive";
+  mode?: "exclusive";
+  signal?: AbortSignal;
 }
 
 type LockGrantedCallback<R> = (lock: Lock) => R | Promise<R>;
@@ -29,19 +30,6 @@ type PromiseWithHandles<T> = Promise<T> & {
   resolve: (value: T) => void;
   reject: (err: Error) => void;
 };
-
-function promiseWithHandles<T>(): PromiseWithHandles<T> {
-  let resolve: ((value: T) => void) | undefined;
-  let reject: ((err: Error) => void) | undefined;
-  const promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  }) as PromiseWithHandles<T>;
-  promise.resolve = resolve!;
-  promise.reject = reject!;
-
-  return promise;
-}
 
 class LockManager<T> {
   private heldLocks = new Set<string>();
@@ -64,7 +52,7 @@ class LockManager<T> {
     optionsOrCallback: LockOptions | LockGrantedCallback<R>,
     callback?: LockGrantedCallback<R>,
   ): Promise<R> {
-    const { callback: cb } = this.getOptionsAndCallback(
+    const { options, callback: cb } = this.getOptionsAndCallback(
       optionsOrCallback,
       callback,
     );
@@ -72,14 +60,29 @@ class LockManager<T> {
     // TODO: use options.mode
     const mode = "exclusive";
     const releasedPromise = promiseWithHandles<R>();
-
-    const requestQueue = this.ensureRequestQueue<R>(name);
-    requestQueue.push({
+    const lockRequest: LockRequest<R> = {
       name,
       mode,
       promise: releasedPromise,
       callback: cb,
-    });
+    };
+    const requestQueue = this.ensureRequestQueue<R>(name);
+
+    if (options.signal) {
+      if (options.signal.aborted) {
+        return Promise.reject(abortError());
+      }
+
+      options.signal.addEventListener("abort", () => {
+        const index = requestQueue.indexOf(lockRequest);
+        if (index === -1) return;
+
+        const [abortedRequest] = requestQueue.splice(index, 1);
+        abortedRequest.promise.reject(abortError());
+      });
+    }
+
+    requestQueue.push(lockRequest);
     this.processRequestQueue(name);
 
     return releasedPromise;
@@ -141,6 +144,27 @@ class LockManager<T> {
       };
     }
   }
+}
+
+function promiseWithHandles<T>(): PromiseWithHandles<T> {
+  let resolve: ((value: T) => void) | undefined;
+  let reject: ((err: Error) => void) | undefined;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  }) as PromiseWithHandles<T>;
+  promise.resolve = resolve!;
+  promise.reject = reject!;
+
+  return promise;
+}
+
+function abortError(): Error {
+  const abortError = new Error(
+    "Failed to execute 'request' on 'LockManager': The request was aborted.",
+  );
+  abortError.name = "AbortError";
+  return abortError;
 }
 
 function assert(expr: unknown, msg = ""): asserts expr {

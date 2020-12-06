@@ -8,7 +8,7 @@ This package is 🚧 _work-in-progress_ so the API is not fully implemented:
 - [ ] [`locks.request()`](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request)
     - [x] "exclusive" locks
     - [ ] "shared" locks
-    - [ ] `options.signal`
+    - [x] `options.signal`
     - [ ] `options.ifAvailable`
     - [ ] `options.steal`
 - [ ] [`locks.query()`](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/query)
