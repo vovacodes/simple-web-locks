@@ -1,0 +1,16 @@
+{
+  "name": "simple-web-locks",
+  "version": "1.0.0",
+  "description": "A single threaded implementation of Web Locks API. Works across runtimes (Browser, Deno, Node).",
+  "main": "mod.js",
+  "repository": "https://github.com/vovacodes/simple-web-locks.git",
+  "author": "Vladimir Guguiev <vladimir.guguiev@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "prepublish": "yarn build",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^4.1.2"
+  }
+}
