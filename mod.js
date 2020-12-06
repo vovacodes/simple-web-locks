@@ -10,34 +10,36 @@ class AssertionError extends Error {
         this.name = "AssertionError";
     }
 }
-function promiseWithHandles() {
-    let resolve;
-    let reject;
-    const promise = new Promise((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-    promise.resolve = resolve;
-    promise.reject = reject;
-    return promise;
-}
 class LockManager {
     constructor() {
         this.heldLocks = new Set();
         this.lockRequestQueueMap = new Map();
     }
     request(name, optionsOrCallback, callback) {
-        const { callback: cb } = this.getOptionsAndCallback(optionsOrCallback, callback);
+        const { options, callback: cb } = this.getOptionsAndCallback(optionsOrCallback, callback);
         // TODO: use options.mode
         const mode = "exclusive";
         const releasedPromise = promiseWithHandles();
-        const requestQueue = this.ensureRequestQueue(name);
-        requestQueue.push({
+        const lockRequest = {
             name,
             mode,
             promise: releasedPromise,
             callback: cb,
-        });
+        };
+        const requestQueue = this.ensureRequestQueue(name);
+        if (options.signal) {
+            if (options.signal.aborted) {
+                return Promise.reject(abortError());
+            }
+            options.signal.addEventListener("abort", () => {
+                const index = requestQueue.indexOf(lockRequest);
+                if (index === -1)
+                    return;
+                const [abortedRequest] = requestQueue.splice(index, 1);
+                abortedRequest.promise.reject(abortError());
+            });
+        }
+        requestQueue.push(lockRequest);
         this.processRequestQueue(name);
         return releasedPromise;
     }
@@ -86,6 +88,22 @@ class LockManager {
             };
         }
     }
+}
+function promiseWithHandles() {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    promise.resolve = resolve;
+    promise.reject = reject;
+    return promise;
+}
+function abortError() {
+    const abortError = new Error("Failed to execute 'request' on 'LockManager': The request was aborted.");
+    abortError.name = "AbortError";
+    return abortError;
 }
 function assert(expr, msg = "") {
     if (!expr) {

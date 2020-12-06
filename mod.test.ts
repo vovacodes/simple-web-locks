@@ -17,15 +17,15 @@ Deno.test("should provide an `exclusive` lock by default", async () => {
 });
 
 Deno.test("should execute the callback not sooner than the next microtask", async () => {
-  let executed = false;
+  let acquired = false;
   locks.request("resource:a", () => {
-    executed = true;
+    acquired = true;
   });
 
-  assertEquals(executed, false);
+  assertEquals(acquired, false);
 
   await Promise.resolve();
-  assertEquals(executed, true);
+  assertEquals(acquired, true);
 });
 
 Deno.test("should return the value returned by the callback", async () => {
@@ -69,34 +69,78 @@ Deno.test("should wait until the lock is released before granting it to someone 
   locks.request("resource:a", async () => {
     await task1;
   });
-  let called2 = false;
+  let acquired2 = false;
   locks.request("resource:a", async () => {
-    called2 = true;
+    acquired2 = true;
     await task2;
   });
-  let called3 = false;
+  let acquired3 = false;
   const finalPromise = locks.request("resource:a", async () => {
-    called3 = true;
-    return called3;
+    acquired3 = true;
+    return acquired3;
   });
   await exhaustMicrotaskQueue();
-  assertEquals(called2, false);
-  assertEquals(called3, false);
+  assertEquals(acquired2, false);
+  assertEquals(acquired3, false);
 
   resolveTask1?.();
   await exhaustMicrotaskQueue();
-  assertEquals(called2, true);
-  assertEquals(called3, false);
+  assertEquals(acquired2, true);
+  assertEquals(acquired3, false);
 
   resolveTask2?.();
   await exhaustMicrotaskQueue();
-  assertEquals(called2, true);
-  assertEquals(called3, true);
+  assertEquals(acquired2, true);
+  assertEquals(acquired3, true);
 
   assertEquals(await finalPromise, true);
 });
 
-Deno.test("should immediately abort the request if the provided signal is aborted", async () => {
+Deno.test("should immediately abort the request if the provided signal already is aborted", async () => {
+  let resolveTask1: ((v?: unknown) => void) | undefined;
+  const task1 = new Promise((resolve) => {
+    resolveTask1 = resolve;
+  });
+  const controller = new AbortController();
+  controller.abort();
+
+  locks.request("resource:a", async () => {
+    await task1;
+  });
+  let acquired2 = false;
+  const request2 = locks.request(
+    "resource:a",
+    { signal: controller.signal },
+    async () => {
+      acquired2 = true;
+    },
+  );
+  let acquired3 = false;
+  locks.request("resource:a", async () => {
+    acquired3 = true;
+    return acquired3;
+  });
+  try {
+    await request2;
+    throw "absurd";
+  } catch (err) {
+    if (err === "absurd") throw err;
+    assertEquals(err.name, "AbortError");
+    assertEquals(
+      err.message,
+      "Failed to execute 'request' on 'LockManager': The request was aborted.",
+    );
+  }
+  assertEquals(acquired2, false);
+  assertEquals(acquired3, false);
+
+  resolveTask1?.();
+  await exhaustMicrotaskQueue();
+  assertEquals(acquired2, false);
+  assertEquals(acquired3, true);
+});
+
+Deno.test("should abort the request if the provided signal is aborted before the lock is acquired", async () => {
   let resolveTask1: ((v?: unknown) => void) | undefined;
   const task1 = new Promise((resolve) => {
     resolveTask1 = resolve;
@@ -106,33 +150,79 @@ Deno.test("should immediately abort the request if the provided signal is aborte
   locks.request("resource:a", async () => {
     await task1;
   });
-  let called2 = false;
+  let acquired2 = false;
   const request2 = locks.request(
     "resource:a",
     { signal: controller.signal },
     async () => {
-      called2 = true;
+      acquired2 = true;
     },
   );
-  let called3 = false;
+  let acquired3 = false;
   locks.request("resource:a", async () => {
-    called3 = true;
-    return called3;
+    acquired3 = true;
+    return acquired3;
   });
-  await exhaustMicrotaskQueue();
-  assertEquals(called2, false);
-  assertEquals(called3, false);
-
   controller.abort();
-  await exhaustMicrotaskQueue();
-  await assertThrowsAsync(() => request2, Error, "fooo");
-  assertEquals(called2, false);
-  assertEquals(called3, false);
+  try {
+    await request2;
+    throw "absurd";
+  } catch (err) {
+    if (err === "absurd") throw err;
+    assertEquals(err.name, "AbortError");
+    assertEquals(
+      err.message,
+      "Failed to execute 'request' on 'LockManager': The request was aborted.",
+    );
+  }
 
   resolveTask1?.();
   await exhaustMicrotaskQueue();
-  assertEquals(called2, false);
-  assertEquals(called3, true);
+  assertEquals(acquired2, false);
+  assertEquals(acquired3, true);
+});
+
+Deno.test("should not do anything if the provided signal is aborted after the lock is acquired", async () => {
+  let resolveTask1: ((v?: unknown) => void) | undefined;
+  const task1 = new Promise((resolve) => {
+    resolveTask1 = resolve;
+  });
+  let resolveTask2: ((v?: unknown) => void) | undefined;
+  const task2 = new Promise((resolve) => {
+    resolveTask2 = resolve;
+  });
+  const controller = new AbortController();
+
+  locks.request("resource:a", async () => {
+    await task1;
+  });
+  let acquired2 = false;
+  const request2 = locks.request(
+    "resource:a",
+    { signal: controller.signal },
+    async () => {
+      acquired2 = true;
+      await task2;
+      return "OK";
+    },
+  );
+  let acquired3 = false;
+  locks.request("resource:a", async () => {
+    acquired3 = true;
+    return acquired3;
+  });
+
+  resolveTask1?.();
+  await exhaustMicrotaskQueue();
+  assertEquals(acquired2, true);
+  assertEquals(acquired3, false);
+
+  controller.abort();
+  await exhaustMicrotaskQueue();
+  resolveTask2?.();
+  await exhaustMicrotaskQueue();
+  assertEquals(await request2, "OK");
+  assertEquals(acquired3, true);
 });
 
 function exhaustMicrotaskQueue() {
