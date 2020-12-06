@@ -69,21 +69,17 @@ Deno.test("should wait until the lock is released before granting it to someone 
   locks.request("resource:a", async () => {
     await task1;
   });
-
   let called2 = false;
   locks.request("resource:a", async () => {
     called2 = true;
     await task2;
   });
-
   let called3 = false;
   const finalPromise = locks.request("resource:a", async () => {
     called3 = true;
     return called3;
   });
-
   await exhaustMicrotaskQueue();
-
   assertEquals(called2, false);
   assertEquals(called3, false);
 
@@ -98,6 +94,45 @@ Deno.test("should wait until the lock is released before granting it to someone 
   assertEquals(called3, true);
 
   assertEquals(await finalPromise, true);
+});
+
+Deno.test("should immediately abort the request if the provided signal is aborted", async () => {
+  let resolveTask1: ((v?: unknown) => void) | undefined;
+  const task1 = new Promise((resolve) => {
+    resolveTask1 = resolve;
+  });
+  const controller = new AbortController();
+
+  locks.request("resource:a", async () => {
+    await task1;
+  });
+  let called2 = false;
+  const request2 = locks.request(
+    "resource:a",
+    { signal: controller.signal },
+    async () => {
+      called2 = true;
+    },
+  );
+  let called3 = false;
+  locks.request("resource:a", async () => {
+    called3 = true;
+    return called3;
+  });
+  await exhaustMicrotaskQueue();
+  assertEquals(called2, false);
+  assertEquals(called3, false);
+
+  controller.abort();
+  await exhaustMicrotaskQueue();
+  await assertThrowsAsync(() => request2, Error, "fooo");
+  assertEquals(called2, false);
+  assertEquals(called3, false);
+
+  resolveTask1?.();
+  await exhaustMicrotaskQueue();
+  assertEquals(called2, false);
+  assertEquals(called3, true);
 });
 
 function exhaustMicrotaskQueue() {

@@ -13,7 +13,8 @@ interface LockRequest<R> {
 
 // TODO: support all of the options: https://wicg.github.io/web-locks/#dictdef-lockoptions
 interface LockOptions {
-  mode: "exclusive";
+  mode?: "exclusive";
+  signal?: AbortSignal;
 }
 
 type LockGrantedCallback<R> = (lock: Lock) => R | Promise<R>;
@@ -64,7 +65,7 @@ class LockManager<T> {
     optionsOrCallback: LockOptions | LockGrantedCallback<R>,
     callback?: LockGrantedCallback<R>,
   ): Promise<R> {
-    const { callback: cb } = this.getOptionsAndCallback(
+    const { options, callback: cb } = this.getOptionsAndCallback(
       optionsOrCallback,
       callback,
     );
