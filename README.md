@@ -44,6 +44,11 @@ This project uses [Deno](https://deno.land/) and [TypeScript](https://www.typesc
 deno test
 ```
 
+### Benchmarks
+```sh
+deno run benchmarks.ts
+```
+
 ### Build JS
 ```sh
 yarn build
