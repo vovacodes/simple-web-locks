@@ -1,7 +1,8 @@
 # 🔐 simple-web-locks
 A single threaded implementation of [Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API). Works across runtimes (Browser, Deno, Node).
 
-## Status
+## Status 
+![Test](https://github.com/vovacodes/simple-web-locks/workflows/test/badge.svg)
 
 This package is 🚧 _work-in-progress_ so the API is not fully implemented:
 
